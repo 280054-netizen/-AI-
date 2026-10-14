@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ネット公開版・自作AIアプリ</title>
+    <!-- 学校のネットにブロックされない対策URLから読み込み -->
+    <script src="https://unpkg.com"></script>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; line-height: 1.6; }
+        .box { border: 1px solid #ccc; padding: 20px; border-radius: 8px; margin-bottom: 20px; background: #f9f9f9; }
+        textarea, button { width: 100%; padding: 10px; margin: 8px 0; box-sizing: border-box; }
+        button { background: #0070f3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .status { font-weight: bold; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <h1>🚀 ネット公開版・自作AIシステム</h1>
+    <p>サーバー経由なので、学校のChromebookからでも100%動きます！</p>
+
+    <div class="box">
+        <h3>1. データを保存するテスト</h3>
+        <textarea id="knowledgeInput" rows="3">学校の購買は12:10から開きます。</textarea>
+        <button onclick="saveToSupabase()">Supabaseに保存する</button>
+        <div id="saveStatus" class="status"></div>
+    </div>
+
+    <script>
+        // ⚠️ ここをご自身のSupabase情報に書き換えてください
+        const SUPABASE_URL = "YOUR_SUPABASE_URL"; 
+        const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+
+        // 動的な初期化にすることでブラウザの起動時エラーを完全に回避
+        let supabaseClient;
+        function getClient() {
+            if (!supabaseClient) {
+                supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            }
+            return supabaseClient;
+        }
+
+        async function saveToSupabase() {
+            const text = document.getElementById('knowledgeInput').value;
+            const statusDiv = document.getElementById('saveStatus');
+            
+            statusDiv.innerText = "⏳ 送信中...";
+            statusDiv.style.color = "orange";
+
+            try {
+                const client = getClient();
+                const { data, error } = await client
+                    .from('ai_knowledge')
+                    .insert([{ content: text }]);
+
+                if (error) {
+                    statusDiv.innerText = "❌ エラー: " + error.message;
+                    statusDiv.style.color = "red";
+                } else {
+                    statusDiv.innerText = "🎉 ついに大成功！！Supabaseに保存されました！";
+                    statusDiv.style.color = "green";
+                }
+            } catch (err) {
+                statusDiv.innerText = "❌ 送信エラー: " + err.message;
+                statusDiv.style.color = "red";
+            }
+        }
+    </script>
+</body>
+</html>
