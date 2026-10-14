@@ -3,35 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ネット公開版・自作AIアプリ</title>
-    <!-- 学校のネットにブロックされない対策URLから読み込み -->
+    <title>完成版・自作AIシステム</title>
     <script src="https://unpkg.com"></script>
     <style>
         body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; line-height: 1.6; }
         .box { border: 1px solid #ccc; padding: 20px; border-radius: 8px; margin-bottom: 20px; background: #f9f9f9; }
-        textarea, button { width: 100%; padding: 10px; margin: 8px 0; box-sizing: border-box; }
+        input, textarea, button { width: 100%; padding: 10px; margin: 8px 0; box-sizing: border-box; }
         button { background: #0070f3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
         .status { font-weight: bold; margin-top: 10px; }
+        .result { background: #eef9ff; padding: 15px; border-left: 5px solid #0070f3; margin-top: 10px; white-space: pre-wrap; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h1>🚀 ネット公開版・自作AIシステム</h1>
-    <p>サーバー経由なので、学校のChromebookからでも100%動きます！</p>
+    <h1>🚀 完成版・自作AIシステム</h1>
+    <p>Supabaseからデータを吐き出させて、無料AIに答えさせます！</p>
 
+    <!-- 1. データを保存するエリア -->
     <div class="box">
-        <h3>1. データを保存するテスト</h3>
-        <textarea id="knowledgeInput" rows="3">学校の購買は12:10から開きます。</textarea>
+        <h3>1. AIに知識を覚えさせる</h3>
+        <textarea id="knowledgeInput" rows="3">学校の購買は12:10から開きます。土日は休みです。</textarea>
         <button onclick="saveToSupabase()">Supabaseに保存する</button>
         <div id="saveStatus" class="status"></div>
     </div>
 
+    <!-- 2. データを吐き出させてAIに質問するエリア -->
+    <div class="box">
+        <h3>2. 登録したデータからAIに質問する</h3>
+        <input type="text" id="questionInput" placeholder="例：購買は何時から開く？">
+        <button onclick="askAI()">AIに質問する</button>
+        <div id="searchResult" class="result" style="display:none;"></div>
+    </div>
+
     <script>
-        // ⚠️ ここをご自身のSupabase情報に書き換えてください
         const SUPABASE_URL = "YOUR_SUPABASE_URL"; 
         const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
 
-        // 動的な初期化にすることでブラウザの起動時エラーを完全に回避
         let supabaseClient;
         function getClient() {
             if (!supabaseClient) {
@@ -40,29 +47,75 @@
             return supabaseClient;
         }
 
+        // 【機能A】データを保存する
         async function saveToSupabase() {
             const text = document.getElementById('knowledgeInput').value;
             const statusDiv = document.getElementById('saveStatus');
-            
             statusDiv.innerText = "⏳ 送信中...";
             statusDiv.style.color = "orange";
 
             try {
                 const client = getClient();
-                const { data, error } = await client
-                    .from('ai_knowledge')
-                    .insert([{ content: text }]);
+                const { data, error } = await client.from('ai_knowledge').insert([{ content: text }]);
+                if (error) { statusDiv.innerText = "❌ エラー: " + error.message; statusDiv.style.color = "red"; }
+                else { statusDiv.innerText = "🎉 Supabaseに保存されました！"; statusDiv.style.color = "green"; }
+            } catch (err) { statusDiv.innerText = "❌ 送信エラー: " + err.message; statusDiv.style.color = "red"; }
+        }
+
+        // 【機能B】データを吐き出させて、AIに回答させる（今回のメイン！）
+        async function askAI() {
+            const question = document.getElementById('questionInput').value;
+            const resultDiv = document.getElementById('searchResult');
+            if (!question) return alert('質問を入力してください！');
+
+            resultDiv.style.display = "block";
+            resultDiv.innerText = "🔍 Supabaseからデータを吐き出し中 ➔ AIが思考中...";
+            resultDiv.style.color = "orange";
+
+            try {
+                const client = getClient();
+                
+                // 1. Supabaseから、保存されているデータを全件引っ張ってくる（吐き出させる）
+                const { data, error } = await client.from('ai_knowledge').select('content');
 
                 if (error) {
-                    statusDiv.innerText = "❌ エラー: " + error.message;
-                    statusDiv.style.color = "red";
-                } else {
-                    statusDiv.innerText = "🎉 ついに大成功！！Supabaseに保存されました！";
-                    statusDiv.style.color = "green";
+                    resultDiv.innerText = "❌ Supabaseエラー: " + error.message;
+                    return;
                 }
+
+                if (!data || data.length === 0) {
+                    resultDiv.innerText = "❌ データベースにまだ知識が登録されていません。上のボタンから保存してください！";
+                    return;
+                }
+
+                // 2. 吐き出させたデータを1つの文章にまとめる（AIの参考用）
+                let aiContext = data.map(item => item.content).join("\n");
+
+                // 3. 無料のオープンソースAI（Hugging FaceのLLM）に、知識と質問を投げて回答させる
+                // ※GeminiやOpenAIを使わず、ネット上の無料AIに日本語で考えさせます
+                const prompt = `あなたは親切なAI助手です。以下の【参考知識】だけを元にして、ユーザーの【質問】に日本語で短く答えてください。\n\n【参考知識】:\n${aiContext}\n\n【質問】:\n${question}\n\n【回答】:`;
+
+                const aiResponse = await fetch("https://huggingface.co", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ inputs: prompt, parameters: { max_new_tokens: 150, temperature: 0.3 } })
+                });
+
+                const aiData = await aiResponse.json();
+                
+                // AIの返事から、回答部分だけをきれいに抜き出して画面に吐き出す
+                if (aiData && aiData[0] && aiData[0].generated_text) {
+                    const fullText = aiData[0].generated_text;
+                    const answer = fullText.split("【回答】:")[1] || fullText;
+                    resultDiv.innerText = "✨ AIの回答:\n" + answer.trim();
+                    resultDiv.style.color = "black";
+                } else {
+                    resultDiv.innerText = "❌ AIがうまく回答を生成できませんでした。もう一度試してください。";
+                }
+
             } catch (err) {
-                statusDiv.innerText = "❌ 送信エラー: " + err.message;
-                statusDiv.style.color = "red";
+                resultDiv.innerText = "❌ エラーが発生しました: " + err.message;
+                resultDiv.style.color = "red";
             }
         }
     </script>
